@@ -26,7 +26,7 @@ import math
 import multiprocessing
 
 class Summerizer(object):
-    def __init__(self, title, sentences, raw_sentences, population_size, max_generation, crossover_rate, mutation_rate, num_picked_sents, simWithTitle, simWithDoc, sim2sents, number_of_nouns, order_params):
+    def __init__(self, title, sentences, raw_sentences, population_size, max_generation, crossover_rate, mutation_rate, num_picked_sents, simWithTitle, simWithDoc, sim2sents, number_of_nouns, order_params, MinLT, MaxLT):
         self.title = title
         self.raw_sentences = raw_sentences
         self.sentences = sentences
@@ -41,6 +41,9 @@ class Summerizer(object):
         self.sim2sents = sim2sents
         self.number_of_nouns = number_of_nouns
         self.order_params = order_params
+        self.MaxLT = MaxLT
+        self.MinLT = MinLT
+
 
     def generate_population(self, amount):
         # print("Generating population...")
@@ -63,10 +66,13 @@ class Summerizer(object):
             velocity[np.random.choice(list(range(self.num_objects)), self.num_picked_sents, replace=False)] = 1
             velocity = velocity.tolist()
 
+            life_time = 0
+            age = 0
+            
 
             # print("fitness: {:.4f}" , format(fitness))
             # print(agent)
-            population.append((agent, fitness, pbest_position, velocity))
+            population.append((agent, fitness, pbest_position, velocity, life_time, age))
         return population 
 
 
@@ -137,9 +143,9 @@ class Summerizer(object):
         velocity = velocity.tolist()
 
         if fitness_1a > fitness_1b:
-            child_1 = (agent_1a, fitness_1a, agent_1a, velocity)
+            child_1 = (agent_1a, fitness_1a, agent_1a, velocity, 0, 0)
         else:
-            child_1 = (agent_1b, fitness_1b, agent_1a, velocity)
+            child_1 = (agent_1b, fitness_1b, agent_1a, velocity, 0, 0)
 
         sum_sent_in_summary = sum(child_1[0])
         agent_1 = child_1[0]
@@ -152,7 +158,7 @@ class Summerizer(object):
                     sent = self.sentences[remove_point]
                     sum_sent_in_summary -=1            
             fitness_1 = compute_fitness(self.title, self.sentences, agent_1, self.simWithTitle, self.simWithDoc,self.sim2sents, self.number_of_nouns, self.order_params)
-            child_1 = (agent_1, fitness_1, agent_1, velocity)
+            child_1 = (agent_1, fitness_1, agent_1, velocity, 0, 0)
 
 
         #tìm điểm chéo 2
@@ -164,9 +170,9 @@ class Summerizer(object):
         # agent_2 = individual_2[0][:crossover_point] + individual_1[0][crossover_point:]
         fitness_2b = compute_fitness(self.title, self.sentences, agent_2b, self.simWithTitle, self.simWithDoc,self.sim2sents, self.number_of_nouns, self.order_params)
         if fitness_2a > fitness_2b:
-            child_2 = (agent_2a, fitness_2a, agent_2a, velocity)
+            child_2 = (agent_2a, fitness_2a, agent_2a, velocity, 0, 0)
         else:
-            child_2 = (agent_2b, fitness_2b, agent_2b, velocity)        
+            child_2 = (agent_2b, fitness_2b, agent_2b, velocity, 0, 0)        
         
         sum_sent_in_summary_2 = sum(child_2[0])
         agent_2 = child_2[0]
@@ -179,7 +185,7 @@ class Summerizer(object):
                     sent = self.sentences[remove_point]
                     sum_sent_in_summary_2 -= 1
             fitness_2 = compute_fitness(self.title, self.sentences, agent_2, self.simWithTitle, self.simWithDoc, self.sim2sents, self.number_of_nouns, self.order_params)
-            child_2 = (agent_2, fitness_2, agent_2, velocity)
+            child_2 = (agent_2, fitness_2, agent_2, velocity, 0, 0)
         return child_1, child_2
     
 
@@ -197,7 +203,7 @@ class Summerizer(object):
                 #    agent[i] = 0
                 #    sum_sent_in_summary -=1        
         fitness = compute_fitness(self.title, self.sentences, agent, self.simWithTitle, self.simWithDoc, self.sim2sents, self.number_of_nouns, self.order_params)
-        return (agent, fitness, pbest_position, velocity_vector)
+        return (agent, fitness, pbest_position, velocity_vector, 0, 0)
 
     def compare(self, lst1, lst2):
         for i in range(self.num_objects):
@@ -205,7 +211,52 @@ class Summerizer(object):
                 return False
         return True
 
-    def selection(self, population):
+    def calculate_lifetime(self, fitness, avg_fitness):
+        eta = int(1/2*(self.MaxLT - self.MinLT)*(fitness/avg_fitness))
+        life_time = min(self.MinLT + eta, self.MaxLT)
+        return life_time
+
+
+    def evaluate_age(self, population):
+
+        fitness_value = []
+        for individual in population:
+            fitness_value.append(individual[1])
+        try:
+            avg_fitness = sta.mean(fitness_value)
+        except: 
+            print("bug")
+            import pdb; pdb.set_trace()
+
+
+        #life_time
+        new_population = []
+        for individual in population:
+            indiv = list(individual)
+            indiv[4] =  self.calculate_lifetime(indiv[1], avg_fitness)
+            indiv[5] += 1
+            new_population.append(tuple(indiv))
+            
+        return new_population 
+
+
+    def check_timelife(self, population):
+        count = 0
+        new_population = []
+        for individual in population:
+            if individual[5] >= individual[4]:
+                count +=1
+            else:
+                new_population.append(individual)
+
+        return count, new_population
+
+    def selection(self, population, popsize):
+        if len(population) == 0:
+            import pdb; pdb.set_trace()
+            print("wait...")
+
+        population = self.evaluate_age(population)
         max_sent = int(0.3*len(self.sentences))
         if len(self.sentences) < 4:
             max_sent = len(self.sentences)       
@@ -213,18 +264,19 @@ class Summerizer(object):
 
         population = sorted(population, key=lambda x: x[1], reverse=True)
 
-        chosen_agents = int(0.65*len(population))
+        chosen_agents = int(0.1*len(population))
         
-        elitism = population[0]
-        new_population.append(elitism)
-        population = population[1:chosen_agents]
+        elitism = population[: chosen_agents]
+        population = population[chosen_agents : ]
         
 
         total_fitness = 0
         for indivi in population:
             total_fitness = total_fitness + indivi[1]  
-        population_size = len(population)
+
+        population_size = popsize
         cpop = 0.0
+
         while cpop <= population_size:
             population = sorted(population, key=lambda x: x[1], reverse=True)
             parent_1 = None
@@ -236,7 +288,7 @@ class Summerizer(object):
                     try:
                         parent_1 = random.choice(population)
                     except:
-                        return self.generate_population(population_size)
+                        return self.generate_population(population_size), self.population_size
          
             parent_2 = None
             check_time_2 = time.time()
@@ -246,7 +298,7 @@ class Summerizer(object):
                     try:
                         parent_2 =  random.choice(population)
                     except:
-                        return self.generate_population(population_size)
+                        return self.generate_population(population_size), self.population_size
                 
                 if parent_2 != None:
                     if self.compare(parent_2[0], parent_1[0]) :
@@ -284,6 +336,19 @@ class Summerizer(object):
             else:
                 cpop += check1 + check2
 
+
+        new_size = len(new_population)
+        if new_size != 0:
+            new_population = self.evaluate_age(new_population)
+        else:
+            new_population = self.generate_population(population_size)
+            new_population = self.evaluate_age(new_population)
+
+        Dsize, current_population = self.check_timelife(population)
+        new_population.extend(elitism)
+        new_population.extend(current_population)
+        new_popsize = popsize + new_size - Dsize
+
         fitness_value = []
 
         for individual in new_population:
@@ -292,7 +357,7 @@ class Summerizer(object):
         try:
             avg_fitness = sta.mean(fitness_value)
         except:
-            return self.generate_population(population_size)
+            return self.generate_population(population_size), self.population_size
 
 
         agents_in_Ev = [] 
@@ -301,14 +366,17 @@ class Summerizer(object):
                 agents_in_Ev.append(agent)
 
         if len(agents_in_Ev) >= len(new_population)*0.9 :
-            new_population = self.generate_population(20) 
-            agents_in_Ev = sorted(agents_in_Ev, key=lambda x: x[1], reverse=True)
+            new_popsize = self.population_size
+            widen_population = self.generate_population(int(new_popsize*0.7))
+            widen_population = self.evaluate_age(widen_population)
 
+            agents_in_Ev = sorted(agents_in_Ev, key=lambda x: x[1], reverse=True)
+            
             for x in agents_in_Ev:
                 new_population.append(x)
                 if len (new_population) == self.population_size:
                     break
-        return new_population 
+        return new_population, new_popsize
 
     def normalize(self, chromosome):
         for i in range(len(chromosome)):
@@ -329,6 +397,11 @@ class Summerizer(object):
                 ans[i] = 1
         return ans
 
+    def solveGA(self, population):
+        popsize = self.population_size
+        for i in tqdm(range(self.max_generation)):
+            population, popsize = self.selection(population, popsize)
+        return population
 
     def PSO(self):
 
@@ -344,6 +417,7 @@ class Summerizer(object):
         
 
         #init population
+        popsize = self.population_size
         population = self.generate_population(self.population_size)
         
         for i in tqdm(range(n_iterations)):
@@ -374,7 +448,9 @@ class Summerizer(object):
                 individual[0] = particle_position_vector.tolist()
                 individual = tuple(individual)
 
-            populationGA = self.selection(population)
+            populationGA, popsize = self.selection(population, popsize)
+            # import pdb; pdb.set_trace()
+            # populationGA = self.solveGA(population)
             populationGA = sorted(populationGA, key=lambda x: x[1], reverse=True)
             populationPSO = sorted(population, key=lambda x: x[1], reverse=True)
             combine =  int(self.population_size/2)
@@ -396,13 +472,6 @@ class Summerizer(object):
         return best_individual
  
 
-   #MASingleDocSum    
-    def solve(self):
-        population = self.generate_population(self.population_size)
-        for i in tqdm(range(self.max_generation)):
-            population = self.selection(population)
-        return self.find_best_individual(population)
-    
     
     def show(self, individual,  file):
         index = individual[0]
@@ -517,7 +586,10 @@ def start_run(processID, POPU_SIZE, MAX_GEN, CROSS_RATE, MUTATE_RATE, sub_storie
         #       NUM_PICKED_SENTS = int(len(sentences)*0.2)
             NUM_PICKED_SENTS = 4
 
-        Solver = Summerizer(title, sentences, raw_sentences, POPU_SIZE, MAX_GEN, CROSS_RATE, MUTATE_RATE, NUM_PICKED_SENTS, simWithTitle, simWithDoc, sim2sents, number_of_nouns, order_params)
+        MinLT = 1
+        MaxLT = 7
+
+        Solver = Summerizer(title, sentences, raw_sentences, POPU_SIZE, MAX_GEN, CROSS_RATE, MUTATE_RATE, NUM_PICKED_SENTS, simWithTitle, simWithDoc, sim2sents, number_of_nouns, order_params, MinLT, MaxLT)
         best_individual = Solver.PSO()
         file_name = os.path.join(save_path, example[1])         
 
@@ -650,8 +722,6 @@ def main():
     if not os.path.exists('hyp6'):
         os.makedirs('hyp6')
 
-    # save_path = 'hyp'
-    # save_path_for_valid = 'hyp1'
 
 
 
@@ -665,62 +735,11 @@ def main():
     stories = load_docs(directory)
     start_time = time.time()
 
-    #grid training
-    # n = 100 
-    # set_of_docs = [stories[i:i + n] for i in range(0, len(stories), n)]  
-    # rouge_score_valid = []
-    # for sub_stories in set_of_docs:
-        # rouge_score_1 = []
-        # for i in range(5): 
-        #     #chạy từng bộ
-        #     start_run(POPU_SIZE, MAX_GEN, CROSS_RATE, MUTATE_RATE, sub_stories, save_path, i) 
-        #     #tính rouge của từng bộ
-        #     rouge1, rouge2, rougeL = evaluate_rouge(save_path)
-        #     rouge_score_1.append(rouge1)
-        # weights_had_max_value = rouge_score_1.index(max(rouge_score_1))
-        
-        #chay weights do tren 1 tap ngau nhien
-        # random_part = random.choice(set_of_docs)
-        # while random_part == sub_stories:
-        #     random_part = random.choice(set_of_docs)
-        # print("best_weights_for_a_loop: " , weights_had_max_value )
-        # start_run(POPU_SIZE, MAX_GEN, CROSS_RATE, MUTATE_RATE, random_part, save_path_for_valid, weights_had_max_value)
-        
-
-        #test 1 set parameter
-        # start_run(POPU_SIZE, MAX_GEN, CROSS_RATE, MUTATE_RATE, sub_stories, save_path_for_valid, 4) 
-        # rouge1_valid, rouge2_valid, rougeL_valid = evaluate_rouge(save_path_for_valid)
-        # rouge_score_valid.append((4,rouge1_valid, rouge2_valid, rougeL_valid)) 
-
-
-
-
-        # rouge1_valid, rouge2_valid, rougeL_valid = evaluate_rouge(save_path_for_valid)
-        # rouge_score_valid.append((weights_had_max_value,rouge1_valid, rouge2_valid, rougeL_valid)) 
-
-    # res = max(rouge_score_valid, key = lambda i : i[1])
-    # print("final_best_weights: ", res[0])
-    # print("rouge 1: ", res[1])
-    # print("rouge 2: ", res[2])
-    # print("rouge L: ", res[3])
-
-    # fp = open("results2.txt",'w', encoding='utf-8')
-    # fp.write('\n'.join('{} , {} , {} , {} '.format(x[0],x[1], x[2], x[3]) for x in rouge_score_valid))
     
-    multiprocess(6, POPU_SIZE, MAX_GEN, CROSS_RATE,
-                 MUTATE_RATE, stories, save_path)
+    # multiprocess(6, POPU_SIZE, MAX_GEN, CROSS_RATE,
+    #              MUTATE_RATE, stories, save_path)
+    start_run(1, POPU_SIZE, MAX_GEN, CROSS_RATE, MUTATE_RATE, stories, save_path[0], 0)
 
-    # multiprocess(5, POPU_SIZE, MAX_GEN, CROSS_RATE,
-    #              MUTATE_RATE, stories, save_path2, order_params = 1)
-
-    # multiprocess(5, POPU_SIZE, MAX_GEN, CROSS_RATE,
-    #              MUTATE_RATE, stories, save_path3, order_params = 2)
-
-    # multiprocess(5, POPU_SIZE, MAX_GEN, CROSS_RATE,
-    #              MUTATE_RATE, stories, save_path4, order_params = 3)
-
-    # multiprocess(5, POPU_SIZE, MAX_GEN, CROSS_RATE,
-    #              MUTATE_RATE, stories, save_path5, order_params = 4)
     print("--- %s mins ---" % ((time.time() - start_time)/(60.0*len(stories))))
 
 if __name__ == '__main__':
