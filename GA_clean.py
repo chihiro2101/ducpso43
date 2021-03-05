@@ -421,7 +421,8 @@ class Summerizer(object):
         population = self.generate_population(self.population_size)
         
         for i in tqdm(range(n_iterations)):
-            for individual in population:
+            for i, individual in enumerate(population):
+                
                 individual = list(individual)
                 fitness_candidate = compute_fitness(self.title, self.sentences, individual[0], self.simWithTitle, self.simWithDoc, self.sim2sents, self.number_of_nouns, self.order_params)
                 if fitness_candidate > individual[1]:
@@ -430,9 +431,9 @@ class Summerizer(object):
                 if fitness_candidate > gbest_fitness_value:
                     gbest_fitness_value = fitness_candidate
                     gbest_position = individual[0]
-                individual = tuple(individual)
+                population[i] = tuple(individual)
 
-            for individual in population:
+            for i, individual in enumerate(population):
                 individual = list(individual)
                 particle_position_vector = np.array(individual[0])
                 pbest_position = np.array(individual[2]) 
@@ -446,7 +447,7 @@ class Summerizer(object):
                 new_velocity = np.array(individual[3])
                 particle_position_vector = self.subtraction(particle_position_vector, new_velocity)
                 individual[0] = particle_position_vector.tolist()
-                individual = tuple(individual)
+                population[i] = tuple(individual)
 
             populationGA, popsize = self.selection(population, popsize)
             # import pdb; pdb.set_trace()
