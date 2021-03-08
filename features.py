@@ -102,39 +102,39 @@ class METRIC(object):
         # le  = 0.29
         if self.order_params == 0:
             # parameters set 0
-            rel = 0.4
-            le = 0.15
-            pos = 0.2
-            noun = 0.25
-        elif self.order_params == 1:
-            # parameters set 1
-            rel = 0.35
-            le = 0.2
-            pos = 0.15
-            noun = 0.3
-        elif self.order_params == 2:
-            # parameters set 2
-            rel = 0.45
-            le = 0.1
-            pos = 0.2
-            noun = 0.25
-        elif self.order_params == 3:
-            # parameters set 3
-            rel = 0.35
-            le = 0.2
-            pos = 0.2
-            noun = 0.25
-        elif self.order_params == 4:
-            # parameters set 4
-            rel = 0.35
-            le = 0.2
-            pos = 0.1
-            noun = 0.35
-        elif self.order_params == 5:
             rel = 0.25
             le = 0.3
             pos = 0.15
             noun = 0.3
+        elif self.order_params == 1:
+            # parameters set 1
+            rel = 0.3
+            le = 0.3
+            pos = 0.15
+            noun = 0.25
+        elif self.order_params == 2:
+            # parameters set 2
+            rel = 0.3
+            le = 0.3
+            pos = 0.1
+            noun = 0.3
+        # elif self.order_params == 3:
+            # parameters set 3
+        #     rel = 0.35
+        #     le = 0.2
+        #     pos = 0.2
+        #     noun = 0.25
+        # elif self.order_params == 4:
+        #     # parameters set 4
+        #     rel = 0.35
+        #     le = 0.2
+        #     pos = 0.1
+        #     noun = 0.35
+        # elif self.order_params == 5:
+        #     rel = 0.25
+        #     le = 0.3
+        #     pos = 0.15
+        #     noun = 0.3
 
         # My
         # rel = 0.25
