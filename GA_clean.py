@@ -155,7 +155,6 @@ class Summerizer(object):
                 remove_point = 1 + random.randint(0, self.num_objects - 2)
                 if agent_1[remove_point] == 1:
                     agent_1[remove_point] = 0
-                    sent = self.sentences[remove_point]
                     sum_sent_in_summary -=1            
             fitness_1 = compute_fitness(self.title, self.sentences, agent_1, self.simWithTitle, self.simWithDoc,self.sim2sents, self.number_of_nouns, self.order_params)
             child_1 = (agent_1, fitness_1, agent_1, velocity, 0, 0)
@@ -182,7 +181,6 @@ class Summerizer(object):
                 remove_point = 1 + random.randint(0, self.num_objects - 2)
                 if agent_2[remove_point] == 1:
                     agent_2[remove_point] = 0
-                    sent = self.sentences[remove_point]
                     sum_sent_in_summary_2 -= 1
             fitness_2 = compute_fitness(self.title, self.sentences, agent_2, self.simWithTitle, self.simWithDoc, self.sim2sents, self.number_of_nouns, self.order_params)
             child_2 = (agent_2, fitness_2, agent_2, velocity, 0, 0)
@@ -242,8 +240,10 @@ class Summerizer(object):
 
     def check_timelife(self, population):
         count = 0
-        new_population = []
-        for individual in population:
+        population = sorted(population, key=lambda x: x[1], reverse=True)
+        chosen = int(0.1*len(population))
+        new_population = population[ : chosen]
+        for individual in population [chosen : ]:
             if individual[5] >= individual[4]:
                 count +=1
             else:
@@ -253,10 +253,9 @@ class Summerizer(object):
 
     def selection(self, population, popsize):
         if len(population) == 0:
-            import pdb; pdb.set_trace()
-            print("wait...")
-
+            population = self.generate_population(self.population_size)
         population = self.evaluate_age(population)
+
         max_sent = int(0.3*len(self.sentences))
         if len(self.sentences) < 4:
             max_sent = len(self.sentences)       
@@ -276,15 +275,15 @@ class Summerizer(object):
 
         population_size = popsize
         cpop = 0.0
-
-        while cpop <= population_size:
+        check_time_global = time.time()
+        while cpop <= population_size or (time.time() - check_time_global) > 300:
             population = sorted(population, key=lambda x: x[1], reverse=True)
             parent_1 = None
 
             check_time_1 = time.time()
             while parent_1 == None:
                 parent_1 = self.rank_select(population)
-                if parent_1 == None and (time.time() - check_time_1) > 100:
+                if parent_1 == None and (time.time() - check_time_1) > 60:
                     try:
                         parent_1 = random.choice(population)
                     except:
@@ -294,7 +293,7 @@ class Summerizer(object):
             check_time_2 = time.time()
             while parent_2 == None :
                 parent_2 = self.roulette_select(total_fitness, population)
-                if parent_2 == None and (time.time() - check_time_2) > 100:
+                if parent_2 == None and (time.time() - check_time_2) > 60:
                     try:
                         parent_2 =  random.choice(population)
                     except:
@@ -340,14 +339,17 @@ class Summerizer(object):
         new_size = len(new_population)
         if new_size != 0:
             new_population = self.evaluate_age(new_population)
+        elif new_size == 0 and len(population) != 0:
+            return elitism.extend(population), population_size
         else:
             new_population = self.generate_population(population_size)
             new_population = self.evaluate_age(new_population)
-
         Dsize, current_population = self.check_timelife(population)
         new_population.extend(elitism)
         new_population.extend(current_population)
         new_popsize = popsize + new_size - Dsize
+        if new_size > 60:
+            new_size = 60
 
         fitness_value = []
 
@@ -366,16 +368,14 @@ class Summerizer(object):
                 agents_in_Ev.append(agent)
 
         if len(agents_in_Ev) >= len(new_population)*0.9 :
-            new_popsize = self.population_size
-            widen_population = self.generate_population(int(new_popsize*0.7))
-            widen_population = self.evaluate_age(widen_population)
-
+            new_population = self.generate_population(int(0.7*self.population_size)) 
             agents_in_Ev = sorted(agents_in_Ev, key=lambda x: x[1], reverse=True)
-            
-            for x in agents_in_Ev:
-                new_population.append(x)
-                if len (new_population) == self.population_size:
-                    break
+            chosen = self.population_size - len(new_population)
+            new_population.extend(agents_in_Ev[: chosen])
+            # for x in agents_in_Ev:
+            #     new_population.append(x)
+            #     if len (new_population) == self.population_size:
+            #         break
         return new_population, new_popsize
 
     def normalize(self, chromosome):
@@ -397,9 +397,20 @@ class Summerizer(object):
                 ans[i] = 1
         return ans
 
+    def reduce_mem(self, ans, max_sent):
+
+        sum_sent_in_summary = sum(ans)
+        if sum_sent_in_summary > max_sent:
+            while(sum_sent_in_summary > max_sent):
+                for remove_point in range(self.num_objects - 1, 0, -1):
+                    if ans[remove_point] == 1:
+                        ans[remove_point] = 0
+                        sum_sent_in_summary -=1     
+        return ans  
+
     def solveGA(self, population):
         popsize = self.population_size
-        for i in tqdm(range(self.max_generation)):
+        for i in range(self.max_generation):
             population, popsize = self.selection(population, popsize)
         return population
 
@@ -408,7 +419,12 @@ class Summerizer(object):
         W = 0.5
         c1 = 0.5
         c2 = 0.9
-        n_iterations = 50 
+        n_iterations = 30 
+
+        max_sent = int(0.3*len(self.sentences))
+        if len(self.sentences) < 4:
+            max_sent = len(self.sentences) 
+
 
         gbest_position = np.zeros(self.num_objects)
         gbest_position[np.random.choice(list(range(self.num_objects)), self.num_picked_sents, replace=False)] = 1
@@ -417,17 +433,15 @@ class Summerizer(object):
         
 
         #init population
-        popsize = self.population_size
         population = self.generate_population(self.population_size)
         
         for i in tqdm(range(n_iterations)):
             for i, individual in enumerate(population):
-                
                 individual = list(individual)
                 fitness_candidate = compute_fitness(self.title, self.sentences, individual[0], self.simWithTitle, self.simWithDoc, self.sim2sents, self.number_of_nouns, self.order_params)
                 if fitness_candidate > individual[1]:
                     individual[1] = fitness_candidate 
-                    individual[2] = individual[0]
+                    individual[2] = individual[0] #pbest of individual
                 if fitness_candidate > gbest_fitness_value:
                     gbest_fitness_value = fitness_candidate
                     gbest_position = individual[0]
@@ -446,12 +460,10 @@ class Summerizer(object):
                 individual[3] = self.normalize(new_velocity)
                 new_velocity = np.array(individual[3])
                 particle_position_vector = self.subtraction(particle_position_vector, new_velocity)
-                individual[0] = particle_position_vector.tolist()
+                individual[0] = self.reduce_mem(particle_position_vector.tolist(), max_sent)
                 population[i] = tuple(individual)
 
-            populationGA, popsize = self.selection(population, popsize)
-            # import pdb; pdb.set_trace()
-            # populationGA = self.solveGA(population)
+            populationGA = self.solveGA(population)
             populationGA = sorted(populationGA, key=lambda x: x[1], reverse=True)
             populationPSO = sorted(population, key=lambda x: x[1], reverse=True)
             combine =  int(self.population_size/2)
@@ -466,16 +478,13 @@ class Summerizer(object):
     def find_best_individual(self, population):
         if len(population) == 0:
             return None
-        best_individual = deepcopy(population[0])
-        for individual in population[1:]:
-            if individual[1] > best_individual[1]:
-                best_individual = individual
+        best_individual = sorted(population, key=lambda x: x[1], reverse=True)[0]
         return best_individual
  
 
     
     def show(self, individual,  file):
-        index = individual[0]
+        index = individual[2]
         f = open(file,'w', encoding='utf-8')
         for i in range(len(index)):
             if index[i] == 1:
@@ -508,38 +517,6 @@ def start_run(processID, POPU_SIZE, MAX_GEN, CROSS_RATE, MUTATE_RATE, sub_storie
 # def start_run(POPU_SIZE, MAX_GEN, CROSS_RATE, MUTATE_RATE, sub_stories, save_path, order_params):
    
     for example in sub_stories:
-        # import pdb
-        # pdb.set_trace()
-        # try:
-        #     raw_sents = example[0].split("\n")
-        #     print("Preprocessing ", example[1])
-        #     sentences = []
-        #     sentences_for_NNP = []
-
-            
-        #     df = pd.DataFrame(raw_sents, columns =['raw'])
-        #     df['preprocess_raw'] = df['raw'].apply(lambda x: clean_text(x))
-        #     newdf = df.loc[(df['preprocess_raw'] != 'None')]
-        #     raw_sentences = newdf['preprocess_raw'].values.tolist()
-
-        #     for raw_sent in raw_sentences:
-        #         sent = preprocess_raw_sent(raw_sent)
-        #         sent_tmp = preprocess_numberOfNNP(raw_sent)
-        #         # print(f'time-preprocess_numberOfNNP = {time.time() - time_2} s')
-        #         sentences.append(sent)
-        #         sentences_for_NNP.append(sent_tmp)
-            
-            
-        #     title_raw = raw_sentences[0]
-        #     title = preprocess_raw_sent(title_raw)
-        #     number_of_nouns = count_noun(sentences_for_NNP)
-
-
-        #     simWithTitle = sim_with_title(sentences, title)
-        #     sim2sents = sim_2_sent(sentences)
-        #     simWithDoc = []
-        #     for sent in sentences:
-        #         simWithDoc.append(sim_with_doc(sent, sentences))
         start_time = time.time()
         # raw_sentences = re.split("\n\s+", example[0])
         raw_sents = re.split("\n", example[0])
@@ -702,7 +679,7 @@ def evaluate_rouge(hyp_path):
 def main():
     # Setting Variables
     POPU_SIZE = 30
-    MAX_GEN = 20
+    MAX_GEN = 4
     CROSS_RATE = 0.8
     MUTATE_RATE = 0.4
     #NUM_PICKED_SENTS = 4
@@ -737,9 +714,9 @@ def main():
     start_time = time.time()
 
     
-    # multiprocess(6, POPU_SIZE, MAX_GEN, CROSS_RATE,
-    #              MUTATE_RATE, stories, save_path)
-    start_run(1, POPU_SIZE, MAX_GEN, CROSS_RATE, MUTATE_RATE, stories, save_path[0], 0)
+    multiprocess(6, POPU_SIZE, MAX_GEN, CROSS_RATE,
+                 MUTATE_RATE, stories, save_path)
+    # start_run(1, POPU_SIZE, MAX_GEN, CROSS_RATE, MUTATE_RATE, stories, save_path[0], 0)
 
     print("--- %s mins ---" % ((time.time() - start_time)/(60.0*len(stories))))
 
